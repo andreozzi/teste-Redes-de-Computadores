@@ -1,7 +1,7 @@
 <!-- src/components/UserCard.vue -->
 <template>
   <div class="flex items-center p-4 border border-gray-300 rounded-lg shadow-md">
-    <img :src="user.avatar_url" alt="User avatar" class="w-12 h-12 rounded-full mr-4" />
+    <img :src="user.avatar_url" :alt="user.login" class="w-12 h-12 rounded-full mr-4" />
     <div class="flex-1">
       <h2 class="text-lg font-semibold">{{ user.name }}</h2>
       <a
@@ -13,12 +13,21 @@
       </a>
     </div>
     <button
-      @click="$emit('toggleStar')"
-      class="ml-4 text-yellow-400 hover:text-yellow-600"
+      v-if="showFavoriteButton"
+      @click="$emit('addFavorite')"
+      class="ml-4 bg-green-500 text-white py-1 px-3 rounded-lg hover:bg-green-600 text-sm"
     >
-      <i :class="starred ? 'fas fa-star' : 'far fa-star'"></i>
+      Add to Favorites
     </button>
     <button
+      v-else
+      @click="$emit('toggleFavorite')"
+      class="ml-4 text-yellow-400 hover:text-yellow-600"
+    >
+      <i :class="user.isFavorite ? 'fas fa-star' : 'far fa-star'"></i>
+    </button>
+    <button
+      v-if="!showFavoriteButton"
       @click="$emit('removeUser')"
       class="ml-2 text-red-400 hover:text-red-600"
     >
@@ -31,7 +40,10 @@
 export default {
   props: {
     user: Object,
-    starred: Boolean,
+    showFavoriteButton: {
+      type: Boolean,
+      default: false,
+    },
   },
 };
 </script>

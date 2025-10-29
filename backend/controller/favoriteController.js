@@ -1,159 +1,88 @@
-const { Request, Response } = require('express');
-const favoriteRepository = require('../repository/favoriteRepository');
-const { request, response } = require('../app');
-
-
-
-const padrao = (request, response) => {    
-    const users = favoriteRepository.findAll()
-    console.log(users)
-    return response.status(200).json(users)
-}
-
-const criar = (request, response) => {
-    const usuarios = favoriteRepository.listarTodos();
-
-    const entrada = request.body;
-    if(usuarios.length===5){
-        return response.status(400).json(
-            {
-                "error": `O limite de usuários foi ultrapassado. Não foi possível inserir o usuário: ${entrada.username}`
-            }
-        )
-    }
-
-    let estaNaLista = false 
-
-    if(usuarios.length!=0){
-        usuarios.forEach(user => {
-            if(user.login===entrada.name){
-                estaNaLista = true;
-
-                return response.status(400).json({
-                    "error": `Usuáriio ja está na lista. Não foi possivel inserir o usuario: ${entrada.login}`  
-                }
-
-
-                )
-            }}
-        )
-    }
-
-    if( estaNaLista === false){
-        inserirUsuario(entrada.login);
-
-        return response.status(201).json(
-            {
-                msg: "Usuario inserido!"
-            }
-        )
-    }
-
-
-
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 const axios = require('axios');
-const usuariosFavoritos = [];
+const userController = require('./userController'); // Import userController
+let usuariosFavoritos = []; // Use let to allow reassigning for sorting
 
-const inserirUsuario = async (req, res) =>{
-    const usuario = req.param;
-    if(usuariosFavoritos.some((perfil) => perfil.login === user.login )) {
-        res.json({
-            msg: "Usuario ja esta na lista"
-        })
-    }else{
-        try{
-            const resposta = await axios.get(`https://api.github.com/users${usuario}`);
-            const login = resposta.data.login;
-            const nome = resposta.data.name;
-            const avatar = resposta.data.avatar_url;
-            const perfilUrl = resposta.data.url;
-            const user = { login : login, name : nome, avatar_url : avatar, url: perfilUrl };
-            memoria.usuarios.push(user);
-            console.log(user);
-        } catch(err){
-            res.json({msg : "Usuario não encontrado"+err});
+const inserirUsuario = async (req, res) => {
+    const { username } = req.params;
+
+    if (usuariosFavoritos.some((perfil) => perfil.login === username)) {
+        return res.status(400).json({
+            msg: "Usuário já está na lista"
+        });
+    }
+
+    try {
+        // Use the getUserByUsername from userController to fetch user data
+        const userResponse = await userController.getUserByUsernameInternal(username);
+        if (userResponse.status !== 200) {
+            return res.status(userResponse.status).json({ msg: userResponse.message });
         }
-
+        const userData = userResponse.user;
+        const user = {
+            id: userData.id,
+            login: userData.login,
+            avatar_url: userData.avatar_url,
+            html_url: userData.html_url,
+            name: userData.name || userData.login,
+            isFavorite: true // Mark as favorite by default when added
+        };
         
-}
+        usuariosFavoritos.push(user);
+        
+        console.log(user);
+        return res.status(201).json({
+            msg: "Usuário inserido com sucesso!",
+            user
+        });
+    } catch (err) {
+        console.error("Error in inserirUsuario:", err);
+        return res.status(500).json({ msg: "Internal Server Error", error: err.message });
+    }
+};
 
-}
+const listarUsuarios = (req, res) => {
+    return res.status(200).json(usuariosFavoritos);
+};
 
- 
+const removerUsuario = (req, res) => {
+    const { username } = req.params;
+    const initialLength = usuariosFavoritos.length;
+    usuariosFavoritos = usuariosFavoritos.filter(user => user.login !== username);
 
+    if (usuariosFavoritos.length < initialLength) {
+        return res.status(200).json({ msg: "Usuário removido com sucesso!" });
+    } else {
+        return res.status(404).json({ msg: "Usuário não encontrado na lista de favoritos." });
+    }
+};
+
+const toggleFavorito = (req, res) => {
+    const { username } = req.params;
+    const userIndex = usuariosFavoritos.findIndex(user => user.login === username);
+
+    if (userIndex > -1) {
+        usuariosFavoritos[userIndex].isFavorite = !usuariosFavoritos[userIndex].isFavorite;
+        return res.status(200).json({
+            msg: "Status de favorito atualizado com sucesso!",
+            user: usuariosFavoritos[userIndex]
+        });
+    } else {
+        return res.status(404).json({ msg: "Usuário não encontrado na lista de favoritos." });
+    }
+};
+
+const ordenarUsuarios = (req, res) => {
+    usuariosFavoritos.sort((a, b) => a.login.localeCompare(b.login));
+    return res.status(200).json({
+        msg: "Usuários ordenados com sucesso!",
+        users: usuariosFavoritos
+    });
+};
 
 module.exports = {
-    inserirUsuario
-
-}
+    inserirUsuario,
+    listarUsuarios,
+    removerUsuario,
+    toggleFavorito,
+    ordenarUsuarios
+};
