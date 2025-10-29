@@ -2,7 +2,7 @@
 <!-- src/views/Home.vue -->
 <template>
     <div class="max-w-3xl mx-auto py-8">
-      <h1 class="text-3xl font-bold mb-4 text-center">GitHub Favorite Users</h1>
+      <h1 class="text-3xl font-bold mb-4 text-center">Lista de Usuários</h1>
   
       <!-- Entrada e botão de busca de usuário -->
       <div class="flex mb-4">
@@ -35,12 +35,12 @@
         <UserCard
           :user="searchedUser"
           :show-favorite-button="true"
-          @addFavorite="addSearchedUserToFavorites"
+          @addToList="addSearchedUserToFavorites"
         />
       </div>
   
       <!-- Grid de usuários favoritos -->
-      <h2 class="text-xl font-bold mb-2">Favorite Users ({{ favoriteUsers.length }}/5):</h2>
+      <h2 class="text-xl font-bold mb-2">Usuários na Lista ({{ favoriteUsers.length }}/5):</h2>
       <div class="grid gap-4 md:grid-cols-2">
         <UserCard
           v-for="user in favoriteUsers"
@@ -57,7 +57,8 @@
   import UserCard from "@/components/UserCard.vue";
   import ErrorMessage from "@/components/ErrorMessage.vue";
   import axios from "axios";
-  
+  import { io } from "socket.io-client"; // Import io from socket.io-client
+
   export default {
     components: {
       UserCard,
@@ -69,22 +70,36 @@
         searchedUser: null,
         favoriteUsers: [],
         errorMessage: "",
+        socket: null, // Add socket instance to data
       };
     },
     created() {
-      this.fetchFavoriteUsers();
+      this.socket = io("http://localhost:6262"); // Connect to socket server
+
+      this.socket.on('connect', () => {
+        console.log('Connected to socket server');
+        this.socket.emit('favorites:get'); // Request initial list
+      });
+
+      this.socket.on('favorites:update', (users) => {
+        this.favoriteUsers = users;
+        this.errorMessage = "";
+      });
+
+      this.socket.on('favorites:error', (message) => {
+        this.errorMessage = message;
+      });
+
+      this.socket.on('disconnect', () => {
+        console.log('Disconnected from socket server');
+      });
+    },
+    beforeUnmount() {
+      if (this.socket) {
+        this.socket.disconnect();
+      }
     },
     methods: {
-      async fetchFavoriteUsers() {
-        try {
-          const response = await axios.get("/api/favorites");
-          this.favoriteUsers = response.data;
-          this.errorMessage = "";
-        } catch (error) {
-          console.error("Error fetching favorite users:", error);
-          this.errorMessage = "Failed to load favorite users.";
-        }
-      },
       async searchUser() {
         if (!this.username) {
           this.errorMessage = "Please enter a GitHub username to search.";
@@ -100,76 +115,29 @@
           this.searchedUser = null;
           if (error.response && error.response.status === 404) {
             this.errorMessage = "GitHub user not found.";
-          } else {
+          }
+           else {
             console.error("Error searching user:", error);
             this.errorMessage = "Failed to search user.";
           }
         }
-        // this.username = ""; // Keep username in input after search
       },
-      async addSearchedUserToFavorites() {
-        if (this.favoriteUsers.length >= 5) {
-          this.errorMessage = "You can only add up to 5 favorite users.";
-          return;
-        }
-  
+      addSearchedUserToFavorites() {
         if (!this.searchedUser) {
           this.errorMessage = "No user searched to add to favorites.";
           return;
         }
-  
-        if (this.favoriteUsers.some(user => user.login === this.searchedUser.login)) {
-          this.errorMessage = "User is already in your favorites.";
-          return;
-        }
-  
-        try {
-          const response = await axios.post(`/api/favorites/${this.searchedUser.login}`);
-          this.favoriteUsers.push(response.data.user);
-          this.searchedUser = null; // Clear searched user after adding to favorites
-          this.errorMessage = "";
-        } catch (error) {
-          if (error.response && error.response.status === 400) {
-            this.errorMessage = error.response.data.msg;
-          } else {
-            console.error("Error adding user to favorites:", error);
-            this.errorMessage = "Failed to add user to favorites.";
-          }
-        }
+        this.socket.emit('favorites:add', this.searchedUser.login);
+        this.searchedUser = null;
       },
-      async removeFavoriteUser(username) {
-        try {
-          await axios.delete(`/api/favorites/${username}`);
-          this.favoriteUsers = this.favoriteUsers.filter((user) => user.login !== username);
-          this.errorMessage = "";
-        } catch (error) {
-          console.error("Error removing favorite user:", error);
-          this.errorMessage = "Failed to remove user from favorites.";
-        }
+      removeFavoriteUser(username) {
+        this.socket.emit('favorites:remove', username);
       },
-      async toggleFavoriteStatus(username) {
-        try {
-          const response = await axios.put(`/api/favorites/${username}/toggle`);
-          const updatedUser = response.data.user;
-          const index = this.favoriteUsers.findIndex(user => user.login === username);
-          if (index !== -1) {
-            this.favoriteUsers.splice(index, 1, updatedUser);
-          }
-          this.errorMessage = "";
-        } catch (error) {
-          console.error("Error toggling favorite status:", error);
-          this.errorMessage = "Failed to toggle favorite status.";
-        }
+      toggleFavoriteStatus(username) {
+        this.socket.emit('favorites:toggle', username);
       },
-      async sortFavoriteUsers() {
-        try {
-          const response = await axios.get("/api/favorites/sort");
-          this.favoriteUsers = response.data.users;
-          this.errorMessage = "";
-        } catch (error) {
-          console.error("Error sorting favorite users:", error);
-          this.errorMessage = "Failed to sort favorite users.";
-        }
+      sortFavoriteUsers() {
+        this.socket.emit('favorites:sort');
       },
     },
   };

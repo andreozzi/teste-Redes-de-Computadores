@@ -1,88 +1,80 @@
+const favoriteRepository = require('../repository/favoriteRepository');
 const axios = require('axios');
-const userController = require('./userController'); // Import userController
-let usuariosFavoritos = []; // Use let to allow reassigning for sorting
 
-const inserirUsuario = async (req, res) => {
+const GITHUB_API_BASE_URL = 'https://api.github.com';
+
+exports.inserirUsuario = async (req, res) => {
     const { username } = req.params;
-
-    if (usuariosFavoritos.some((perfil) => perfil.login === username)) {
-        return res.status(400).json({
-            msg: "Usuário já está na lista"
-        });
-    }
 
     try {
-        // Use the getUserByUsername from userController to fetch user data
-        const userResponse = await userController.getUserByUsernameInternal(username);
-        if (userResponse.status !== 200) {
-            return res.status(userResponse.status).json({ msg: userResponse.message });
-        }
-        const userData = userResponse.user;
-        const user = {
+        const githubResponse = await axios.get(`${GITHUB_API_BASE_URL}/users/${username}`);
+        const userData = githubResponse.data;
+
+        const newUser = {
             id: userData.id,
             login: userData.login,
+            name: userData.name,
             avatar_url: userData.avatar_url,
             html_url: userData.html_url,
-            name: userData.name || userData.login,
-            isFavorite: true // Mark as favorite by default when added
+            isFavorite: false, // Default to not favorite when added
         };
-        
-        usuariosFavoritos.push(user);
-        
-        console.log(user);
-        return res.status(201).json({
-            msg: "Usuário inserido com sucesso!",
-            user
-        });
-    } catch (err) {
-        console.error("Error in inserirUsuario:", err);
-        return res.status(500).json({ msg: "Internal Server Error", error: err.message });
+
+        const addedUser = favoriteRepository.addUser(newUser);
+        res.status(201).json({ msg: "User added to favorites", user: addedUser });
+    } catch (error) {
+        if (error.message.includes("You can only add up to 5 favorite users.") || error.message.includes("User is already in your favorites.")) {
+            return res.status(400).json({ msg: error.message });
+        }
+        console.error("Error adding user to favorites:", error);
+        res.status(500).json({ msg: "Failed to add user to favorites." });
     }
 };
 
-const listarUsuarios = (req, res) => {
-    return res.status(200).json(usuariosFavoritos);
+exports.listarUsuarios = (req, res) => {
+    try {
+        const users = favoriteRepository.getUsers();
+        res.status(200).json(users);
+    } catch (error) {
+        console.error("Error listing favorite users:", error);
+        res.status(500).json({ msg: "Failed to list favorite users." });
+    }
 };
 
-const removerUsuario = (req, res) => {
+exports.removerUsuario = (req, res) => {
     const { username } = req.params;
-    const initialLength = usuariosFavoritos.length;
-    usuariosFavoritos = usuariosFavoritos.filter(user => user.login !== username);
-
-    if (usuariosFavoritos.length < initialLength) {
-        return res.status(200).json({ msg: "Usuário removido com sucesso!" });
-    } else {
-        return res.status(404).json({ msg: "Usuário não encontrado na lista de favoritos." });
+    try {
+        const removed = favoriteRepository.removeUser(username);
+        if (removed) {
+            res.status(200).json({ msg: "User removed from favorites." });
+        } else {
+            res.status(404).json({ msg: "User not found in favorites." });
+        }
+    } catch (error) {
+        console.error("Error removing user from favorites:", error);
+        res.status(500).json({ msg: "Failed to remove user from favorites." });
     }
 };
 
-const toggleFavorito = (req, res) => {
+exports.toggleFavorito = (req, res) => {
     const { username } = req.params;
-    const userIndex = usuariosFavoritos.findIndex(user => user.login === username);
-
-    if (userIndex > -1) {
-        usuariosFavoritos[userIndex].isFavorite = !usuariosFavoritos[userIndex].isFavorite;
-        return res.status(200).json({
-            msg: "Status de favorito atualizado com sucesso!",
-            user: usuariosFavoritos[userIndex]
-        });
-    } else {
-        return res.status(404).json({ msg: "Usuário não encontrado na lista de favoritos." });
+    try {
+        const updatedUser = favoriteRepository.toggleFavorite(username);
+        res.status(200).json({ msg: "Favorite status toggled.", user: updatedUser });
+    } catch (error) {
+        if (error.message.includes("User not found in favorites.")) {
+            return res.status(404).json({ msg: error.message });
+        }
+        console.error("Error toggling favorite status:", error);
+        res.status(500).json({ msg: "Failed to toggle favorite status." });
     }
 };
 
-const ordenarUsuarios = (req, res) => {
-    usuariosFavoritos.sort((a, b) => a.login.localeCompare(b.login));
-    return res.status(200).json({
-        msg: "Usuários ordenados com sucesso!",
-        users: usuariosFavoritos
-    });
-};
-
-module.exports = {
-    inserirUsuario,
-    listarUsuarios,
-    removerUsuario,
-    toggleFavorito,
-    ordenarUsuarios
+exports.ordenarUsuarios = (req, res) => {
+    try {
+        const sortedUsers = favoriteRepository.sortUsers();
+        res.status(200).json({ msg: "Users sorted.", users: sortedUsers });
+    } catch (error) {
+        console.error("Error sorting favorite users:", error);
+        res.status(500).json({ msg: "Failed to sort favorite users." });
+    }
 };

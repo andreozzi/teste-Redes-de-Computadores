@@ -14,10 +14,10 @@
     </div>
     <button
       v-if="showFavoriteButton"
-      @click="$emit('addFavorite')"
+      @click="$emit('addToList')"
       class="ml-4 bg-green-500 text-white py-1 px-3 rounded-lg hover:bg-green-600 text-sm"
     >
-      Add to Favorites
+      Add to List
     </button>
     <button
       v-else
