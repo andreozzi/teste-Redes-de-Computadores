@@ -99,4 +99,6 @@
   };
   </script>
   
-  
+  <style scoped>
+  /* Aqui pode-se adicionar estilos específicos para esta página */
+  </style>
